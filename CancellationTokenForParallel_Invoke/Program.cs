@@ -2,72 +2,53 @@
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using static System.Console;
 
 namespace CancellationTokenForParallel_Invoke
 {
     class Program
     {
-        static void DoActionNTimes(Action action, CancellationToken token)
+        static async Task<int> DoSomethingButTwice(CancellationToken cancellation)
         {
-            Action[] actions = Enumerable.Repeat(action, 2).ToArray();
-            try
+            return await Task.Run(() =>
+             {
+                 var po = new ParallelOptions { CancellationToken = cancellation };
+
+                 Parallel.Invoke(po, () => Test1(cancellation), () => Test1(cancellation));
+                 return 0;
+             });
+        }
+
+        static void Test1(CancellationToken token)
+        {
+            for(int i = 0; i <= 10; i++)
             {
-                Parallel.Invoke(new ParallelOptions { CancellationToken = token }, actions);
-            }
-            catch(OperationCanceledException)
-            {
-                Console.WriteLine("Operation was cancelled.");
+                WriteLine($"Was cancellation requested: {token.IsCancellationRequested}");
+                Thread.Sleep(1000);
             }
         }
 
-        static void DoActionNTimes(CancellationToken token)
+        static async Task Main(string[] args)
         {
-            Action action = new Action(() =>
-            {
-                for (int i = 0; i < 5; i++)
-                {
-                    Console.WriteLine($"Action state: {i}...");
-                }
-            });
-            Action[] actions = Enumerable.Repeat(action, 3).ToArray();
-            try
-            {
-                Parallel.Invoke(new ParallelOptions { CancellationToken = token }, actions);
-            }
-            catch(OperationCanceledException)
-            {
-                Console.WriteLine("Operation was cancelled");
-            }
-        }
+            var cts = new CancellationTokenSource();
+            var ct = cts.Token;
 
-        static void Main(string[] args)
-        {
-            Action ac = new Action(() => Console.WriteLine("action..."));
-            CancellationTokenSource cts = new CancellationTokenSource();
-            CancellationToken token = cts.Token;
-            for (int i = 0; i < 4; i++)
+            DoSomethingButTwice(ct);
+
+            for(int i = 0; i < 10; i++)
             {
-                DoActionNTimes(ac, token);
-                if (i == 2)
+                WriteLine($"i == {i}");
+                Thread.Sleep(1000);
+
+                if(i == 5)
                 {
+                    WriteLine("Cancellation request sent. ");
                     cts.Cancel();
+                    break;
                 }
             }
 
-            Console.WriteLine("\n");
-
-            CancellationTokenSource cancellationTokenSource = new CancellationTokenSource();
-            CancellationToken cancellationToken = cancellationTokenSource.Token;
-            for (int i = 0; i < 4; i++)
-            {
-                DoActionNTimes(cancellationToken);
-                if(i == 2)
-                {
-                    cancellationTokenSource.Cancel();
-                }
-            }
-
-            Console.ReadKey();
+            ReadKey();
         }
     }
 }
